@@ -346,23 +346,51 @@
     let categoryStates = {};
     let categoryColors = {};
 
-    // Load category states and colors from localStorage
+    // Load category states from localStorage (for per-device collapse states)
     function loadCategoryStates() {
       const savedStates = localStorage.getItem('categoryStates');
       if (savedStates) {
         categoryStates = JSON.parse(savedStates);
       }
-      
-      const savedColors = localStorage.getItem('categoryColors');
-      if (savedColors) {
-        categoryColors = JSON.parse(savedColors);
+    }
+
+    // Save category states to localStorage
+    function saveCategoryStates() {
+      localStorage.setItem('categoryStates', JSON.stringify(categoryStates));
+    }
+
+    // Load category metadata (order and colors) from database
+    async function loadCategoryMetadata() {
+      try {
+        const docRef = doc(db, "metadata", "categoryData");
+        const docSnap = await getDoc(docRef);
+        
+        if (docSnap.exists()) {
+          const data = docSnap.data();
+          categoryOrder = data.order || [];
+          categoryColors = data.colors || {};
+        } else {
+          // Initialize if document doesn't exist
+          await setDoc(docRef, { 
+            order: [], 
+            colors: {} 
+          });
+        }
+      } catch (error) {
+        console.error("Error loading category metadata:", error);
       }
     }
 
-    // Save category states and colors to localStorage
-    function saveCategoryStates() {
-      localStorage.setItem('categoryStates', JSON.stringify(categoryStates));
-      localStorage.setItem('categoryColors', JSON.stringify(categoryColors));
+    // Save category metadata (order and colors) to database
+    async function saveCategoryMetadata() {
+      try {
+        await setDoc(doc(db, "metadata", "categoryData"), { 
+          order: categoryOrder,
+          colors: categoryColors
+        });
+      } catch (error) {
+        console.error("Error saving category metadata:", error);
+      }
     }
 
     window.toggleAddForm = function() {
@@ -372,25 +400,6 @@
       btn.innerHTML = form.classList.contains("visible") ? 
         '<span>✖</span> Cancel' : '<span>➕</span> Add Item';
     };
-
-    async function loadCategoryOrder() {
-      try {
-        const docRef = doc(db, "metadata", "categoryOrder");
-        const docSnap = await getDoc(docRef);
-        categoryOrder = docSnap.exists() ? docSnap.data().order : [];
-        if (!docSnap.exists()) await setDoc(docRef, { order: [] });
-      } catch (error) {
-        console.error("Error loading category order:", error);
-      }
-    }
-
-    async function saveCategoryOrder() {
-      try {
-        await setDoc(doc(db, "metadata", "categoryOrder"), { order: categoryOrder });
-      } catch (error) {
-        console.error("Error saving category order:", error);
-      }
-    }
 
     function sortCategories(categories) {
       if (!categoryOrder.length) return categories;
@@ -450,12 +459,15 @@
         input.click();
       });
       
-      input.addEventListener('input', (e) => {
+      input.addEventListener('input', async (e) => {
         const color = e.target.value;
         categoryColors[categoryName] = color;
         headerElement.style.backgroundColor = color;
         headerElement.style.color = getContrastColor(color);
+        
+        // Save to both localStorage and database
         saveCategoryStates();
+        await saveCategoryMetadata();
       });
       
       container.appendChild(btn);
@@ -465,8 +477,9 @@
 
     async function loadItems() {
       try {
-        await loadCategoryOrder();
-        loadCategoryStates();
+        await loadCategoryMetadata(); // Load from database first
+        loadCategoryStates(); // Then load local UI states
+        
         const querySnapshot = await getDocs(collection(db, "items"));
         const itemsByType = {};
 
@@ -491,7 +504,7 @@
           const header = document.createElement("div");
           header.className = "category-header";
           
-          // Set header color if saved
+          // Set header color from database
           if (categoryColors[type]) {
             header.style.backgroundColor = categoryColors[type];
             header.style.color = getContrastColor(categoryColors[type]);
@@ -635,22 +648,28 @@
             batch.update(doc(db, "items", docSnap.id), { type: newType }));
           
           await batch.commit();
+          
+          // Update category order
           const index = categoryOrder.indexOf(oldType);
           if (index > -1) {
             categoryOrder[index] = newType;
-            await saveCategoryOrder();
           }
           
-          // Update category states and colors if the name changed
-          if (categoryStates[oldType]) {
-            categoryStates[newType] = true;
-            delete categoryStates[oldType];
-          }
+          // Update category colors if the name changed
           if (categoryColors[oldType]) {
             categoryColors[newType] = categoryColors[oldType];
             delete categoryColors[oldType];
           }
+          
+          // Update category states
+          if (categoryStates[oldType]) {
+            categoryStates[newType] = true;
+            delete categoryStates[oldType];
+          }
+          
+          // Save all changes
           saveCategoryStates();
+          await saveCategoryMetadata();
           
           loadItems();
         } catch (error) {
@@ -690,7 +709,7 @@
 
         if (!categoryOrder.includes(type)) {
           categoryOrder.push(type);
-          await saveCategoryOrder();
+          await saveCategoryMetadata();
         }
 
         document.getElementById("newType").value = "";
