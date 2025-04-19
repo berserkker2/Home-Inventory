@@ -93,6 +93,7 @@
       align-items: center;
       gap: 1rem;
       transition: background 0.2s;
+      position: relative;
     }
 
     .item:last-child {
@@ -142,10 +143,37 @@
       font-weight: 600;
     }
 
+    /* Action Buttons */
     .item-actions {
+      display: none;
+      position: absolute;
+      right: 1rem;
+      top: 50%;
+      transform: translateY(-50%);
+      background: white;
+      border-radius: var(--radius);
+      box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+      padding: 0.25rem;
+      gap: 0.25rem;
+      z-index: 10;
+    }
+
+    .item.active .item-actions {
       display: flex;
-      gap: 0.5rem;
-      flex-shrink: 0;
+    }
+
+    @media (min-width: 768px) {
+      .item-actions {
+        display: flex;
+        position: static;
+        transform: none;
+        box-shadow: none;
+        background: transparent;
+      }
+      
+      .item:hover .item-actions {
+        display: flex;
+      }
     }
 
     /* Button Styles */
@@ -541,6 +569,22 @@
             const itemLi = document.createElement("li");
             itemLi.className = `item ${item.quantity === 0 ? 'zero-stock' : ''}`;
             itemLi.id = `item-${item.id}`;
+            
+            // Create actions container
+            const actionsContainer = document.createElement('div');
+            actionsContainer.className = 'item-actions';
+            actionsContainer.innerHTML = `
+              <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();window.editItem('${item.id}')">
+                <span>✏️</span>
+              </button>
+              <button class="btn btn-sm btn-outline" onclick="event.stopPropagation();window.editImage('${item.id}')">
+                <span>🖼️</span>
+              </button>
+              <button class="btn btn-sm btn-danger" onclick="event.stopPropagation();window.deleteItem('${item.id}')">
+                <span>🗑️</span>
+              </button>
+            `;
+            
             itemLi.innerHTML = `
               <img class="item-image" src="${item.imageURL || 'https://via.placeholder.com/50?text=No+Image'}" 
                    alt="${item.name}" 
@@ -551,19 +595,33 @@
                   <span>Qty: <span class="item-qty ${item.quantity === 0 ? 'zero' : ''}">${item.quantity}</span></span>
                 </div>
               </div>
-              <div class="item-actions">
-                <button class="btn btn-sm btn-outline" onclick="window.editItem('${item.id}')">
-                  <span>✏️</span>
-                </button>
-                <button class="btn btn-sm btn-outline" onclick="window.editImage('${item.id}')">
-                  <span>🖼️</span>
-                </button>
-                <button class="btn btn-sm btn-danger" onclick="window.deleteItem('${item.id}')">
-                  <span>🗑️</span>
-                </button>
-              </div>
             `;
+            
+            itemLi.appendChild(actionsContainer);
+            
+            // Click handler for the entire item
+            itemLi.addEventListener('click', function(e) {
+              // Don't toggle if clicking on an action button
+              if (!e.target.closest('.item-actions')) {
+                // Close all other open action menus
+                document.querySelectorAll('.item.active').forEach(activeItem => {
+                  if (activeItem !== this) activeItem.classList.remove('active');
+                });
+                // Toggle this item's actions
+                this.classList.toggle('active');
+              }
+            });
+            
             itemsList.appendChild(itemLi);
+          });
+
+          // Close menus when clicking outside items
+          document.addEventListener('click', function(e) {
+            if (!e.target.closest('.item')) {
+              document.querySelectorAll('.item.active').forEach(item => {
+                item.classList.remove('active');
+              });
+            }
           });
 
           categoryDiv.appendChild(itemsList);
