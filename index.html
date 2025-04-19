@@ -1,0 +1,79 @@
+<!DOCTYPE html>
+<html>
+<head>
+  <title>Home Inventory</title>
+</head>
+<body>
+  <h1>My Inventory</h1>
+
+  <form id="itemForm">
+    <input placeholder="Name" id="name" required>
+    <input placeholder="Quantity" type="number" id="quantity" required>
+    <input placeholder="Category" id="category" required>
+    <input placeholder="Image URL" id="image" required>
+    <button type="submit">Add</button>
+  </form>
+
+  <div id="items"></div>
+
+  <!-- Firebase code block goes here -->
+  <script type="module">
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+    import { getFirestore, collection, addDoc, getDocs } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-firestore.js";
+
+        const firebaseConfig = {
+            apiKey: "AIzaSyDr4R8rVOzVGgPMyPFJoAAJ8MF0RRL9wXc",
+            authDomain: "home-inventory-ac0d4.firebaseapp.com",
+            projectId: "home-inventory-ac0d4",
+            storageBucket: "home-inventory-ac0d4.firebasestorage.app",
+            messagingSenderId: "227724333061",
+            appId: "1:227724333061:web:7e1068a9ac884fb9f0cc6c"
+        };
+
+
+    const app = initializeApp(firebaseConfig);
+    const db = getFirestore(app);
+
+    const form = document.getElementById("itemForm");
+    const itemsDiv = document.getElementById("items");
+
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      const name = document.getElementById("name").value;
+      const quantity = parseInt(document.getElementById("quantity").value);
+      const category = document.getElementById("category").value;
+      const image = document.getElementById("image").value;
+
+      await addDoc(collection(db, "items"), { name, quantity, category, image });
+      alert("Item added!");
+      form.reset();
+      loadItems();
+    });
+
+    async function loadItems() {
+      itemsDiv.innerHTML = "";
+      const querySnapshot = await getDocs(collection(db, "items"));
+      const grouped = {};
+
+      querySnapshot.forEach((doc) => {
+        const data = doc.data();
+        if (!grouped[data.category]) grouped[data.category] = [];
+        grouped[data.category].push(data);
+      });
+
+      for (let category in grouped) {
+        const section = document.createElement("section");
+        section.innerHTML = `<h2>${category}</h2>`;
+        grouped[category].forEach(item => {
+          const div = document.createElement("div");
+          div.innerHTML = `<strong>${item.name}</strong> (${item.quantity})<br><img src="${item.image}" height="60">`;
+          section.appendChild(div);
+        });
+        itemsDiv.appendChild(section);
+      }
+    }
+
+    loadItems();
+  </script>
+</body>
+</html>
