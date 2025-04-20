@@ -6,7 +6,7 @@
   <title>🏠 Home Inventory</title>
   <style>
     :root {
-      --primary: #000;
+      --primary: #4361ee;
       --primary-light: #eef2ff;
       --danger: #ef4444;
       --danger-light: #fee2e2;
@@ -71,6 +71,24 @@
 
     .category.collapsed .collapse-icon {
       transform: rotate(-90deg);
+    }
+
+    /* Drag and Drop Styles */
+    .category-header {
+      user-select: none;
+    }
+    
+    .category.dragging {
+      opacity: 0.5;
+      border: 2px dashed var(--primary);
+    }
+    
+    .category-placeholder {
+      border: 2px dashed var(--primary);
+      background-color: var(--primary-light);
+      margin-bottom: 1rem;
+      border-radius: var(--radius);
+      height: 60px;
     }
 
     /* Item Styles */
@@ -297,7 +315,7 @@
       pointer-events: none;
     }
 
-    /* Utility Classes */
+    /* Drag Handle */
     .drag-handle {
       cursor: grab;
       opacity: 0.6;
@@ -308,6 +326,7 @@
       opacity: 1;
     }
 
+    /* Utility Classes */
     .loading {
       text-align: center;
       padding: 2rem;
@@ -320,7 +339,7 @@
   <h1>🏠 Home Inventory</h1>
   
   <button class="btn btn-primary toggle-form-btn" onclick="window.toggleAddForm()">
-    <span>+</span> Add Item
+    <span>➕</span> Add Item
   </button>
   
   <div class="add-item-form" id="addItemForm">
@@ -373,6 +392,7 @@
     let categoryOrder = [];
     let categoryStates = {};
     let categoryColors = {};
+    let draggedCategory = null;
 
     // Load category states from localStorage (for per-device collapse states)
     function loadCategoryStates() {
@@ -501,6 +521,103 @@
       container.appendChild(btn);
       container.appendChild(input);
       return container;
+    }
+
+    // Drag and Drop Functions
+    function handleDragStart(e) {
+      draggedCategory = this;
+      this.classList.add('dragging');
+      e.dataTransfer.effectAllowed = 'move';
+      e.dataTransfer.setData('text/html', this.innerHTML);
+    }
+
+    function handleDragOver(e) {
+      e.preventDefault();
+      e.dataTransfer.dropEffect = 'move';
+      const afterElement = getDragAfterElement(e.clientY);
+      const placeholder = document.querySelector('.category-placeholder');
+      
+      if (afterElement == null) {
+        document.getElementById('itemsContainer').appendChild(placeholder);
+      } else {
+        document.getElementById('itemsContainer').insertBefore(placeholder, afterElement);
+      }
+    }
+
+    function handleDragEnd() {
+      this.classList.remove('dragging');
+      const placeholder = document.querySelector('.category-placeholder');
+      if (placeholder && placeholder.parentNode) {
+        placeholder.parentNode.removeChild(placeholder);
+      }
+    }
+
+    function handleDrop(e) {
+      e.preventDefault();
+      if (draggedCategory !== this) {
+        const container = document.getElementById('itemsContainer');
+        const placeholder = document.querySelector('.category-placeholder');
+        const afterElement = getDragAfterElement(e.clientY);
+        
+        if (afterElement == null) {
+          container.appendChild(draggedCategory);
+        } else {
+          container.insertBefore(draggedCategory, afterElement);
+        }
+        
+        // Update category order
+        const categories = Array.from(document.querySelectorAll('.category'));
+        categoryOrder = categories.map(cat => cat.id.replace('category-', ''));
+        saveCategoryMetadata();
+      }
+    }
+
+    function getDragAfterElement(y) {
+      const categories = Array.from(document.querySelectorAll('.category:not(.dragging)'));
+      
+      return categories.reduce((closest, child) => {
+        const box = child.getBoundingClientRect();
+        const offset = y - box.top - box.height / 2;
+        
+        if (offset < 0 && offset > closest.offset) {
+          return { offset: offset, element: child };
+        } else {
+          return closest;
+        }
+      }, { offset: Number.NEGATIVE_INFINITY }).element;
+    }
+
+    function setupDragAndDrop() {
+      const categories = document.querySelectorAll('.category');
+      const container = document.getElementById('itemsContainer');
+      
+      // Create placeholder element
+      const placeholder = document.createElement('div');
+      placeholder.className = 'category-placeholder';
+      placeholder.style.display = 'none';
+      container.appendChild(placeholder);
+      
+      categories.forEach(category => {
+        category.setAttribute('draggable', true);
+        category.addEventListener('dragstart', handleDragStart);
+        category.addEventListener('dragend', handleDragEnd);
+        category.addEventListener('dragover', handleDragOver);
+        category.addEventListener('drop', handleDrop);
+        
+        // Add drag handle to category header
+        const dragHandle = document.createElement('span');
+        dragHandle.className = 'drag-handle';
+        dragHandle.innerHTML = '≡';
+        dragHandle.setAttribute('draggable', true);
+        dragHandle.addEventListener('dragstart', (e) => {
+          e.stopPropagation();
+          handleDragStart.call(category, e);
+        });
+        
+        const header = category.querySelector('.category-header');
+        const title = category.querySelector('.category-title');
+        title.insertBefore(dragHandle, title.firstChild);
+      });
     }
 
     async function loadItems() {
@@ -634,6 +751,9 @@
             itemsList.style.maxHeight = itemsList.scrollHeight + 'px';
           }
         }
+        
+        // Setup drag and drop after categories are loaded
+        setupDragAndDrop();
       } catch (error) {
         console.error("Error loading items:", error);
         document.getElementById("itemsContainer").innerHTML = `
